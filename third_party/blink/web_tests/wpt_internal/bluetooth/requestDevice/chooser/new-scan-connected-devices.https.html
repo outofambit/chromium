@@ -6,24 +6,27 @@
 <script src="/bluetooth/resources/bluetooth-test.js"></script>
 <script src="/bluetooth/resources/bluetooth-fake-devices.js"></script>
 <script>
-'use strict';
-bluetooth_test(() => {
-  setBluetoothManualChooser(true);
+  'use strict';
+  bluetooth_test(async () => {
+    let fake_central =
+      await navigator.bluetooth.test.simulateCentral({ state: 'powered-on' });
+    let fake_chooser = await navigator.bluetooth.test.getManualChooser();
 
-  let requestDevicePromise = setBluetoothFakeAdapter('DeviceEventAdapter')
-                                 .then(() => requestDeviceWithTrustedClick({
-                                         filters: [{services: ['heart_rate']}]
-                                       }));
-  return getBluetoothManualChooserEvents(4).then(events => {
-    assert_equals(events[0], 'chooser-opened(https://web-platform.test:8444)');
-    let idsByName = new AddDeviceEventSet();
-    idsByName.assert_add_device_event(events[1]);
-    assert_true(idsByName.has('Connected Heart Rate Device'), events[1]);
-    assert_equals(events[2], 'discovering');
-    assert_equals(events[3], 'discovery-idle');
-    sendBluetoothManualChooserEvent(
-        'selected', idsByName.get('Connected Heart Rate Device'));
+    await setBluetoothFakeAdapter('DeviceEventAdapter');
+    let requestDevicePromise = requestDeviceWithTrustedClick({
+      filters: [{ services: ['heart_rate'] }]
+    });
+
+    let events = await fake_chooser.waitForEvents(4);
+
+    assert_equals(events[0].type, 'chooser-opened');
+    assert_equals(events[1].type, 'add-or-update-device');
+    assert_equals(Object.hasOwn(events[1], 'peripheralAddress'), true);
+    assert_equals(events[2].type, 'discovering');
+    assert_equals(events[3].type, 'discovery-idle');
+
+    let fake_peripheral = new FakePeripheral(events[1].peripheralAddress, fake_central.fake_central_ptr_)
+    await fake_chooser.selectPeripheral(fake_peripheral);
     return requestDevicePromise;
   });
-});
 </script>
